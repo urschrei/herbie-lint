@@ -1,8 +1,9 @@
 #![feature(rustc_private)]
 #![warn(unused_extern_crates)]
 
+extern crate rustc_ast;
+extern crate rustc_errors;
 extern crate rustc_hir;
-extern crate rustc_lint;
 extern crate rustc_middle;
 extern crate rustc_span;
 
@@ -12,10 +13,10 @@ mod lisp;
 use clippy_utils::diagnostics::span_lint_and_sugg;
 use rusqlite as sql;
 use rustc_errors::Applicability;
-use rustc_hir::{BinOpKind, Expr, ExprKind, QPath, UnOp};
+use rustc_hir::Expr;
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_middle::ty::{self, Ty};
-use rustc_span::Span;
+use rustc_span::Symbol;
 
 use std::borrow::Cow;
 use std::io::{Read, Write};
@@ -91,7 +92,7 @@ impl Herbie {
 
 impl<'tcx> LateLintPass<'tcx> for Herbie {
     fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx Expr<'tcx>) {
-        // Check for #[allow(herbie)] on parent item
+        // Check for #[herbie_ignore] on parent item
         if has_herbie_ignore_attr(cx, expr) {
             return;
         }
@@ -138,14 +139,18 @@ fn is_f64(ty: Ty<'_>) -> bool {
 }
 
 fn has_herbie_ignore_attr(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
-    let parent_id = cx.tcx.hir().get_parent_item(expr.hir_id);
-    let attrs = cx.tcx.hir().attrs(parent_id.into());
-    attrs
-        .iter()
-        .any(|attr| attr.has_name(rustc_span::sym!(herbie_ignore)))
+    let parent_id = cx.tcx.parent_hir_id(expr.hir_id);
+    let attrs = cx.tcx.hir_attrs(parent_id);
+    let herbie_ignore = Symbol::intern("herbie_ignore");
+    attrs.iter().any(|attr| attr.has_name(herbie_ignore))
 }
 
-fn report(cx: &LateContext<'_>, expr: &Expr<'_>, cmdout: &LispExpr, bindings: &MatchBindings) {
+fn report<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &Expr<'tcx>,
+    cmdout: &LispExpr,
+    bindings: &MatchBindings<'tcx>,
+) {
     let suggestion = cmdout.to_rust(cx, bindings);
     span_lint_and_sugg(
         cx,
@@ -158,9 +163,9 @@ fn report(cx: &LateContext<'_>, expr: &Expr<'_>, cmdout: &LispExpr, bindings: &M
     );
 }
 
-fn try_with_herbie(
-    cx: &LateContext<'_>,
-    expr: &Expr<'_>,
+fn try_with_herbie<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &'tcx Expr<'tcx>,
     conf: &Conf,
 ) -> Result<(), Cow<'static, str>> {
     // Convert expression to Lisp

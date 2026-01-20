@@ -1,9 +1,9 @@
 use clippy_utils::source::snippet;
-use rustc_hir::def::Res;
-use rustc_hir::{BinOpKind, Expr, ExprKind, LitKind, QPath, UnOp};
+use rustc_ast::LitKind;
+use rustc_hir::{BinOpKind, Expr, ExprKind, QPath, UnOp};
 use rustc_lint::LateContext;
 use rustc_middle::ty::{self, Ty};
-use rustc_span::{Span, Symbol};
+use rustc_span::{Ident, Span};
 
 use std::collections::HashMap;
 
@@ -352,7 +352,7 @@ impl<'tcx> MatchBindings<'tcx> {
 #[derive(Debug, Clone)]
 pub enum MatchBinding<'tcx> {
     Path(QPath<'tcx>, Span),
-    Field(&'tcx Expr<'tcx>, Symbol, Span),
+    Field(&'tcx Expr<'tcx>, Ident, Span),
     Lit(f64, Span),
     Other(Span),
 }
