@@ -26,28 +26,14 @@ cargo install cargo-dylint dylint-link
 
 ## Usage
 
-Build the lint:
+### Via Git (Recommended)
 
-```bash
-cd /path/to/herbie-lint
-cargo build --release
-```
-
-Run on your project:
-
-```bash
-cargo dylint --lib-path /path/to/herbie-lint/target/release/libherbie_lint@nightly-2025-09-18-aarch64-apple-darwin.dylib \
-    --manifest-path /path/to/your/project/Cargo.toml
-```
-
-Note: The library filename includes your toolchain version and architecture. Adjust accordingly.
-
-Alternatively, add to your project's `Cargo.toml`:
+Add to your project's `Cargo.toml`:
 
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-    { path = "/path/to/herbie-lint" }
+    { git = "https://github.com/yourusername/herbie-lint" }
 ]
 ```
 
@@ -56,6 +42,27 @@ Then run:
 ```bash
 cargo dylint --all
 ```
+
+Dylint will automatically clone, build, and cache the lint.
+
+### One-off check
+
+```bash
+cargo dylint --git https://github.com/yourusername/herbie-lint
+```
+
+### Local build
+
+If you've cloned the repository locally:
+
+```bash
+cd herbie-lint
+cargo build --release
+cargo dylint --lib-path target/release/libherbie_lint@nightly-2025-09-18-aarch64-apple-darwin.dylib \
+    --manifest-path /path/to/your/project/Cargo.toml
+```
+
+Note: The library filename includes your toolchain version and architecture.
 
 ## Configuration (Optional)
 
