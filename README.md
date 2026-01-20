@@ -126,12 +126,16 @@ The lint includes an embedded database with 119 pre-computed transformations sou
 
 ### Using Herbie for dynamic analysis
 
-For expressions not in the database, you can optionally enable live analysis via the [Herbie](https://herbie.uwplse.org/) tool. When enabled, the lint will:
+For expressions not in the database, you can optionally enable live analysis via the [Herbie](https://herbie.uwplse.org/) tool (version 2.0 or later). When enabled, the lint will:
 
-1. **Analyse unknown expressions** - Spawn `herbie-inout` to find improvements for expressions that don't match any pre-computed patterns
+1. **Analyse unknown expressions** - Spawn `herbie shell` to find improvements for expressions that don't match any pre-computed patterns
 2. **Grow your database** - Save newly discovered transformations for future runs
 
 This is useful for codebases with domain-specific numerical patterns not covered by the default database.
+
+**Requirements:** Herbie 2.x installed and available on PATH. Install via:
+- macOS: `brew install minimal-racket && raco pkg install --auto herbie`
+- Linux/other: See [Herbie installation docs](https://herbie.uwplse.org/doc/latest/installing.html)
 
 To enable, create a `Herbie.toml` in your project:
 

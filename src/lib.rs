@@ -249,13 +249,12 @@ fn try_with_herbie<'tcx>(
         return Ok(());
     }
 
-    // Spawn Herbie process
-    let mut command = Command::new("herbie-inout");
+    // Spawn Herbie shell process (Herbie 2.x)
+    let mut command = Command::new("herbie");
     command
+        .arg("shell")
         .arg("--seed")
         .arg(conf.herbie_seed.as_ref())
-        .arg("-o")
-        .arg("rules:numerics")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -271,48 +270,52 @@ fn try_with_herbie<'tcx>(
         }
     };
 
-    // Send expression to Herbie
+    // Send expression to Herbie in FPCore format
     let params = (0..nb_ids)
         .map(|id| format!("herbie{}", id))
         .collect::<Vec<_>>()
         .join(" ");
     let cmdin = lisp_expr.to_lisp("herbie");
-    let lisp_input = format!("(lambda ({}) {})\n", params, cmdin);
+    let fpcore_input = format!("(FPCore ({}) {})\n", params, cmdin);
 
     child
         .stdin
         .as_mut()
         .expect("stdin captured")
-        .write_all(lisp_input.as_bytes())
+        .write_all(fpcore_input.as_bytes())
         .expect("write to stdin");
+
+    // Close stdin to signal end of input
+    drop(child.stdin.take());
 
     // Wait with timeout
     let status = match conf.timeout {
         Some(timeout) => match child.wait_timeout(Duration::from_secs(timeout as u64)) {
             Ok(Some(status)) => status,
-            Ok(None) => return Ok(()), // Timeout
-            Err(err) => return Err(format!("herbie-inout error: {}", err).into()),
+            Ok(None) => {
+                // Timeout - kill the child process
+                let _ = child.kill();
+                return Ok(());
+            }
+            Err(err) => return Err(format!("herbie shell error: {}", err).into()),
         },
         None => child
             .wait()
-            .map_err(|e| format!("herbie-inout error: {}", e))?,
+            .map_err(|e| format!("herbie shell error: {}", e))?,
     };
 
     if !status.success() {
-        return Err(format!("herbie-inout exited with: {}", status).into());
+        return Err(format!("herbie shell exited with: {}", status).into());
     }
 
-    // Parse output
+    // Parse FPCore output
     let mut stdout = child.stdout.ok_or("cannot capture stdout")?;
     let mut output = String::new();
     stdout
         .read_to_string(&mut output)
         .map_err(|e| format!("cannot read output: {}", e))?;
 
-    let mut lines = output.lines();
-    let errin = parse_error_line(lines.next())?;
-    let errout = parse_error_line(lines.next())?;
-    let cmdout_str = lines.next().ok_or("missing output expression")?;
+    let (errin, errout, cmdout_str) = parse_fpcore_output(&output)?;
 
     // Check if there is improvement
     if errin <= errout {
@@ -322,7 +325,7 @@ fn try_with_herbie<'tcx>(
     // Parse and report
     let mut parser = Parser::new();
     let cmdout = parser
-        .parse(cmdout_str)
+        .parse(&cmdout_str)
         .map_err(|_| "could not parse herbie output")?;
 
     report(cx, expr, &cmdout, &bindings);
@@ -333,10 +336,158 @@ fn try_with_herbie<'tcx>(
     Ok(())
 }
 
-fn parse_error_line(line: Option<&str>) -> Result<f64, Cow<'static, str>> {
-    line.and_then(|s| s.split_whitespace().last())
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| "could not parse error value".into())
+/// Parse FPCore output from Herbie 2.x.
+///
+/// FPCore format:
+/// ```text
+/// (FPCore (params)
+///  :herbie-error-input ((256 err1) (8000 err2))
+///  :herbie-error-output ((256 err1) (8000 err2))
+///  body-expr)
+/// ```
+fn parse_fpcore_output(output: &str) -> Result<(f64, f64, String), Cow<'static, str>> {
+    let output = output.trim();
+
+    // Extract :herbie-error-input value
+    let errin =
+        extract_herbie_error(output, ":herbie-error-input").ok_or("missing :herbie-error-input")?;
+
+    // Extract :herbie-error-output value
+    let errout = extract_herbie_error(output, ":herbie-error-output")
+        .ok_or("missing :herbie-error-output")?;
+
+    // Extract body expression - it's the last balanced expression before the final )
+    let body = extract_body_expression(output).ok_or("missing body expression")?;
+
+    Ok((errin, errout, body))
+}
+
+/// Extract the average error value from a Herbie error property.
+/// Format: :herbie-error-input ((bits1 err1) (bits2 err2) ...)
+fn extract_herbie_error(output: &str, property: &str) -> Option<f64> {
+    let start = output.find(property)? + property.len();
+    let rest = output[start..].trim_start();
+
+    // Find the balanced list
+    if !rest.starts_with('(') {
+        return None;
+    }
+
+    let list_content = extract_balanced_list(rest)?;
+
+    // Parse error values from ((bits err) ...) format
+    let mut total = 0.0;
+    let mut count = 0;
+
+    // Simple parsing: find all (bits err) pairs
+    let mut pos = 0;
+    let chars: Vec<char> = list_content.chars().collect();
+    while pos < chars.len() {
+        if chars[pos] == '(' {
+            // Skip opening paren
+            pos += 1;
+            // Skip whitespace and bits value
+            while pos < chars.len() && (chars[pos].is_whitespace() || chars[pos].is_ascii_digit()) {
+                pos += 1;
+            }
+            // Now we should be at the error value
+            let mut err_str = String::new();
+            while pos < chars.len() && chars[pos] != ')' && !chars[pos].is_whitespace() {
+                err_str.push(chars[pos]);
+                pos += 1;
+            }
+            if let Ok(err) = err_str.parse::<f64>() {
+                total += err;
+                count += 1;
+            }
+        }
+        pos += 1;
+    }
+
+    if count > 0 {
+        Some(total / count as f64)
+    } else {
+        None
+    }
+}
+
+/// Extract a balanced parenthesised list from the start of a string.
+fn extract_balanced_list(s: &str) -> Option<String> {
+    if !s.starts_with('(') {
+        return None;
+    }
+
+    let mut depth = 0;
+    let mut end = 0;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = i + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if depth == 0 && end > 0 {
+        Some(s[1..end - 1].to_string()) // Return content without outer parens
+    } else {
+        None
+    }
+}
+
+/// Extract the body expression from FPCore output.
+/// The body is the last expression before the closing paren.
+fn extract_body_expression(output: &str) -> Option<String> {
+    // Find the last balanced expression by scanning from end
+    let output = output.trim();
+    if !output.ends_with(')') {
+        return None;
+    }
+
+    // Remove the final closing paren of FPCore
+    let inner = output[..output.len() - 1].trim_end();
+
+    // Scan backwards to find where the body expression starts
+    let chars: Vec<char> = inner.chars().collect();
+    let mut end = chars.len();
+    let mut depth = 0;
+
+    // Find the start of the last expression
+    for i in (0..chars.len()).rev() {
+        match chars[i] {
+            ')' => depth += 1,
+            '(' => {
+                if depth == 0 {
+                    // This is the start of the body expression
+                    let body = inner[i..end].trim().to_string();
+                    return Some(body);
+                }
+                depth -= 1;
+            }
+            c if c.is_whitespace() && depth == 0 => {
+                // This might be a simple atom expression
+                let body = inner[i + 1..end].trim();
+                if !body.is_empty() && !body.starts_with(':') {
+                    return Some(body.to_string());
+                }
+                end = i;
+            }
+            _ => {}
+        }
+    }
+
+    // Check if there's remaining content
+    let body = inner[0..end].trim();
+    if !body.is_empty() && !body.starts_with(':') {
+        Some(body.to_string())
+    } else {
+        None
+    }
 }
 
 fn save_to_db(
