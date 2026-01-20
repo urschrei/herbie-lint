@@ -141,6 +141,15 @@ impl<'tcx> LateLintPass<'tcx> for Herbie {
             return;
         }
 
+        // Debug: log all f64 expressions containing "scale" or "shift"
+        if std::env::var("HERBIE_LINT_DEBUG_ALL").is_ok() {
+            let snippet = clippy_utils::source::snippet(cx, expr.span, "<expr>");
+            if snippet.contains("scale") || snippet.contains("shift") || snippet.contains("bounds")
+            {
+                eprintln!("[herbie-lint] f64 expr: {}", snippet);
+            }
+        }
+
         // Initialise database connection
         if let Err(err) = self.init() {
             // Report initialisation error once
@@ -154,6 +163,14 @@ impl<'tcx> LateLintPass<'tcx> for Herbie {
         let mut got_match = false;
         for (cmdin, cmdout) in &self.subs {
             if let Some(bindings) = LispExpr::match_expr(cx, expr, cmdin) {
+                if std::env::var("HERBIE_LINT_DEBUG").is_ok() {
+                    let snippet = clippy_utils::source::snippet(cx, expr.span, "<expr>");
+                    eprintln!(
+                        "[herbie-lint] Database match: {} -> {}",
+                        snippet,
+                        cmdout.to_lisp("x")
+                    );
+                }
                 report(cx, expr, cmdout, &bindings);
                 got_match = true;
             }
@@ -164,11 +181,16 @@ impl<'tcx> LateLintPass<'tcx> for Herbie {
             .conf
             .as_ref()
             .expect("Configuration should be read by now");
-        if !got_match
-            && conf.use_herbie != UseHerbieConf::No
-            && let Err(err) = try_with_herbie(cx, expr, conf)
-        {
-            cx.tcx.dcx().span_warn(expr.span, err);
+        if !got_match && conf.use_herbie != UseHerbieConf::No {
+            if std::env::var("HERBIE_LINT_DEBUG_ALL").is_ok() {
+                let snippet = clippy_utils::source::snippet(cx, expr.span, "<expr>");
+                if snippet.contains("scale") || snippet.contains("shift") {
+                    eprintln!("[herbie-lint] Calling try_with_herbie for: {}", snippet);
+                }
+            }
+            if let Err(err) = try_with_herbie(cx, expr, conf) {
+                cx.tcx.dcx().span_warn(expr.span, err);
+            }
         }
     }
 }
@@ -238,14 +260,47 @@ fn try_with_herbie<'tcx>(
     expr: &'tcx Expr<'tcx>,
     conf: &Conf,
 ) -> Result<(), Cow<'static, str>> {
+    // Debug: entering try_with_herbie
+    let debug_snippet = if std::env::var("HERBIE_LINT_DEBUG").is_ok() {
+        Some(clippy_utils::source::snippet(cx, expr.span, "<expr>").to_string())
+    } else {
+        None
+    };
+
     // Convert expression to Lisp
     let (lisp_expr, nb_ids, bindings) = match LispExpr::from_expr(cx, expr) {
-        Some(r) => r,
-        None => return Ok(()), // Expression contains unsupported constructs
+        Some(r) => {
+            if let Some(ref s) = debug_snippet
+                && s.contains("scale")
+                && s.contains("1.")
+            {
+                eprintln!(
+                    "[herbie-lint] from_expr succeeded for: {} (depth={})",
+                    s,
+                    r.0.depth()
+                );
+            }
+            r
+        }
+        None => {
+            // Debug: log expressions that couldn't be converted
+            if let Some(ref s) = debug_snippet {
+                eprintln!("[herbie-lint] Skipping (unsupported construct): {}", s);
+            }
+            return Ok(()); // Expression contains unsupported constructs
+        }
     };
 
     // Skip trivial expressions
     if lisp_expr.depth() <= 2 {
+        if std::env::var("HERBIE_LINT_DEBUG").is_ok() {
+            let snippet = clippy_utils::source::snippet(cx, expr.span, "<expr>");
+            eprintln!(
+                "[herbie-lint] Skipping (too simple, depth={}): {}",
+                lisp_expr.depth(),
+                snippet
+            );
+        }
         return Ok(());
     }
 
@@ -278,6 +333,11 @@ fn try_with_herbie<'tcx>(
         .join(" ");
     let cmdin = lisp_expr.to_lisp("herbie");
     let fpcore_input = format!("(FPCore ({}) {})\n", params, cmdin);
+
+    // Debug: log FPCore being sent
+    if std::env::var("HERBIE_LINT_DEBUG").is_ok() {
+        eprintln!("[herbie-lint] Sending to Herbie: {}", fpcore_input.trim());
+    }
 
     child
         .stdin
@@ -315,6 +375,11 @@ fn try_with_herbie<'tcx>(
     stdout
         .read_to_string(&mut output)
         .map_err(|e| format!("cannot read output: {}", e))?;
+
+    // Debug: log raw Herbie response
+    if std::env::var("HERBIE_LINT_DEBUG").is_ok() {
+        eprintln!("[herbie-lint] Received from Herbie:\n{}", output);
+    }
 
     let (errin, errout, cmdout_str) = match parse_fpcore_output(&output)? {
         HerbieResult::Improvement(errin, errout, body) => (errin, errout, body),
@@ -420,11 +485,19 @@ fn extract_herbie_error(output: &str, property: &str) -> Option<f64> {
         if chars[pos] == '(' {
             // Skip opening paren
             pos += 1;
-            // Skip whitespace and bits value
-            while pos < chars.len() && (chars[pos].is_whitespace() || chars[pos].is_ascii_digit()) {
+            // Skip leading whitespace
+            while pos < chars.len() && chars[pos].is_whitespace() {
                 pos += 1;
             }
-            // Now we should be at the error value
+            // Skip bits value (first number)
+            while pos < chars.len() && chars[pos].is_ascii_digit() {
+                pos += 1;
+            }
+            // Skip whitespace between bits and error value
+            while pos < chars.len() && chars[pos].is_whitespace() {
+                pos += 1;
+            }
+            // Now we should be at the error value - collect it
             let mut err_str = String::new();
             while pos < chars.len() && chars[pos] != ')' && !chars[pos].is_whitespace() {
                 err_str.push(chars[pos]);
@@ -594,4 +667,95 @@ impl From<sql::Error> for InitError {
 #[test]
 fn ui() {
     dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui");
+}
+
+#[cfg(test)]
+mod fpcore_tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_herbie_error_basic() {
+        let output = r#"(FPCore (x) :herbie-error-input ((256 0) (8000 0.5)) body)"#;
+        let result = extract_herbie_error(output, ":herbie-error-input");
+        assert_eq!(result, Some(0.25)); // (0 + 0.5) / 2
+    }
+
+    #[test]
+    fn test_extract_herbie_error_with_decimal() {
+        let output = r#"(FPCore (x) :herbie-error-input ((256 0) (8000 0.009375)) body)"#;
+        let result = extract_herbie_error(output, ":herbie-error-input");
+        assert_eq!(result, Some(0.0046875)); // (0 + 0.009375) / 2
+    }
+
+    #[test]
+    fn test_extract_herbie_error_multiline() {
+        let output = r#"(FPCore
+ (herbie0 herbie1 herbie2)
+ :herbie-status ex-start
+ :herbie-time 1477.225830078125
+ :herbie-error-input
+ ((256 0) (8000 0.009375))
+ :herbie-error-output
+ ((256 0) (8000 0.009375))
+ :name "test"
+ :precision binary64
+ (/ (- herbie0 herbie1) herbie2))"#;
+        let errin = extract_herbie_error(output, ":herbie-error-input");
+        let errout = extract_herbie_error(output, ":herbie-error-output");
+        assert_eq!(errin, Some(0.0046875));
+        assert_eq!(errout, Some(0.0046875));
+    }
+
+    #[test]
+    fn test_extract_herbie_error_improvement() {
+        let output = r#"(FPCore
+ (herbie0 herbie1)
+ :herbie-error-input ((256 0) (8000 0.0016009193652572005))
+ :herbie-error-output ((256 0) (8000 0))
+ :name "(- (* (- herbie0) herbie1) 1)"
+ :precision binary64
+ (fma (- herbie1) herbie0 -1.0))"#;
+        let errin = extract_herbie_error(output, ":herbie-error-input");
+        let errout = extract_herbie_error(output, ":herbie-error-output");
+        // Input error: (0 + 0.0016...) / 2 ≈ 0.0008
+        // Output error: (0 + 0) / 2 = 0
+        assert!(errin.unwrap() > 0.0);
+        assert_eq!(errout, Some(0.0));
+    }
+
+    #[test]
+    fn test_parse_fpcore_output_improvement() {
+        let output = r#"herbie> (FPCore
+ (herbie0 herbie1)
+ :herbie-error-input ((256 0) (8000 0.5))
+ :herbie-error-output ((256 0) (8000 0))
+ :name "test"
+ :precision binary64
+ (fma (- herbie1) herbie0 -1.0))
+herbie> "#;
+        let result = parse_fpcore_output(output).unwrap();
+        match result {
+            HerbieResult::Improvement(errin, errout, body) => {
+                assert_eq!(errin, 0.25);
+                assert_eq!(errout, 0.0);
+                assert!(body.contains("fma"));
+            }
+            HerbieResult::NoResult => panic!("Expected Improvement, got NoResult"),
+        }
+    }
+
+    #[test]
+    fn test_extract_body_expression() {
+        let fpcore = "(FPCore (x) :name \"test\" (+ x 1))";
+        let body = extract_body_expression(fpcore);
+        assert_eq!(body, Some("(+ x 1)".to_string()));
+    }
+
+    #[test]
+    fn test_extract_body_expression_fma() {
+        let fpcore =
+            "(FPCore (herbie0 herbie1) :precision binary64 (fma (- herbie1) herbie0 -1.0))";
+        let body = extract_body_expression(fpcore);
+        assert_eq!(body, Some("(fma (- herbie1) herbie0 -1.0)".to_string()));
+    }
 }
