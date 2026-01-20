@@ -339,26 +339,35 @@ fn try_with_herbie<'tcx>(
 
 /// Parse FPCore output from Herbie 2.x.
 ///
-/// FPCore format:
+/// Herbie shell output includes banners and prompts:
 /// ```text
-/// (FPCore (params)
+/// Herbie 2.1 with seed 857054429
+/// Find help on https://herbie.uwplse.org/, exit with Ctrl-D
+/// herbie> (FPCore
+///  (params)
 ///  :herbie-error-input ((256 err1) (8000 err2))
 ///  :herbie-error-output ((256 err1) (8000 err2))
 ///  body-expr)
+/// herbie>
 /// ```
 fn parse_fpcore_output(output: &str) -> Result<(f64, f64, String), Cow<'static, str>> {
-    let output = output.trim();
+    // Find the FPCore expression in the output (skip banners and prompts)
+    let fpcore_start = output.find("(FPCore").ok_or("no FPCore in output")?;
+    let fpcore_section = &output[fpcore_start..];
+
+    // Find the matching closing paren
+    let fpcore = extract_balanced_list_inclusive(fpcore_section).ok_or("malformed FPCore")?;
 
     // Extract :herbie-error-input value
-    let errin =
-        extract_herbie_error(output, ":herbie-error-input").ok_or("missing :herbie-error-input")?;
+    let errin = extract_herbie_error(&fpcore, ":herbie-error-input")
+        .ok_or("missing :herbie-error-input")?;
 
     // Extract :herbie-error-output value
-    let errout = extract_herbie_error(output, ":herbie-error-output")
+    let errout = extract_herbie_error(&fpcore, ":herbie-error-output")
         .ok_or("missing :herbie-error-output")?;
 
     // Extract body expression - it's the last balanced expression before the final )
-    let body = extract_body_expression(output).ok_or("missing body expression")?;
+    let body = extract_body_expression(&fpcore).ok_or("missing body expression")?;
 
     Ok((errin, errout, body))
 }
@@ -412,8 +421,15 @@ fn extract_herbie_error(output: &str, property: &str) -> Option<f64> {
     }
 }
 
-/// Extract a balanced parenthesised list from the start of a string.
+/// Extract a balanced parenthesised list from the start of a string (without outer parens).
 fn extract_balanced_list(s: &str) -> Option<String> {
+    let full = extract_balanced_list_inclusive(s)?;
+    // Remove outer parens
+    Some(full[1..full.len() - 1].to_string())
+}
+
+/// Extract a balanced parenthesised list from the start of a string (including outer parens).
+fn extract_balanced_list_inclusive(s: &str) -> Option<String> {
     if !s.starts_with('(') {
         return None;
     }
@@ -435,7 +451,7 @@ fn extract_balanced_list(s: &str) -> Option<String> {
     }
 
     if depth == 0 && end > 0 {
-        Some(s[1..end - 1].to_string()) // Return content without outer parens
+        Some(s[..end].to_string())
     } else {
         None
     }
