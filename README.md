@@ -33,7 +33,7 @@ Add to your project's `Cargo.toml`:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/urschrei/herbie-lint", tag = "v0.2.0" }
+    { git = "https://github.com/urschrei/herbie-lint", tag = "v0.3.0" }
 ]
 ```
 
@@ -48,7 +48,7 @@ Dylint will automatically clone, build, and cache the lint.
 ### One-off check
 
 ```bash
-cargo dylint --git https://github.com/urschrei/herbie-lint --tag v0.2.0
+cargo dylint --git https://github.com/urschrei/herbie-lint --tag v0.3.0
 ```
 
 ### Local build
