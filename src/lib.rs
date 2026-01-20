@@ -142,7 +142,38 @@ impl<'tcx> LateLintPass<'tcx> for Herbie {
 }
 
 fn is_f64(ty: Ty<'_>) -> bool {
-    matches!(ty.kind(), ty::Float(ty::FloatTy::F64))
+    match ty.kind() {
+        ty::Float(ty::FloatTy::F64) => true,
+        ty::Float(ty::FloatTy::F16 | ty::FloatTy::F32 | ty::FloatTy::F128) => false,
+        ty::Bool
+        | ty::Char
+        | ty::Int(_)
+        | ty::Uint(_)
+        | ty::Adt(_, _)
+        | ty::Foreign(_)
+        | ty::Str
+        | ty::Array(_, _)
+        | ty::Pat(_, _)
+        | ty::Slice(_)
+        | ty::RawPtr(_, _)
+        | ty::Ref(_, _, _)
+        | ty::FnDef(_, _)
+        | ty::FnPtr(_, _)
+        | ty::Dynamic(_, _, _)
+        | ty::Closure(_, _)
+        | ty::CoroutineClosure(_, _)
+        | ty::Coroutine(_, _)
+        | ty::CoroutineWitness(_, _)
+        | ty::Never
+        | ty::Tuple(_)
+        | ty::Alias(_, _)
+        | ty::Param(_)
+        | ty::Bound(_, _)
+        | ty::Placeholder(_)
+        | ty::Infer(_)
+        | ty::Error(_)
+        | ty::UnsafeBinder(_) => false,
+    }
 }
 
 fn has_herbie_ignore_attr(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
@@ -305,6 +336,15 @@ impl std::fmt::Display for InitError {
         match self {
             InitError::Conf(e) => write!(f, "Configuration error: {}", e),
             InitError::Sql(e) => write!(f, "SQL error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for InitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            InitError::Conf(e) => Some(e),
+            InitError::Sql(e) => Some(e),
         }
     }
 }

@@ -81,6 +81,15 @@ impl std::fmt::Display for ConfError {
     }
 }
 
+impl std::error::Error for ConfError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConfError::Io(e) => Some(e),
+            ConfError::Parse(e) => Some(e),
+        }
+    }
+}
+
 pub fn read_conf() -> Result<Conf, ConfError> {
     match fs::read_to_string("Herbie.toml") {
         Ok(content) => {

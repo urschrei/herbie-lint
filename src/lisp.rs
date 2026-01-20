@@ -27,7 +27,20 @@ impl LispExpr {
                     BinOpKind::Sub => "-",
                     BinOpKind::Mul => "*",
                     BinOpKind::Div => "/",
-                    _ => unreachable!("unsupported binary operator"),
+                    BinOpKind::Rem
+                    | BinOpKind::And
+                    | BinOpKind::Or
+                    | BinOpKind::BitXor
+                    | BinOpKind::BitAnd
+                    | BinOpKind::BitOr
+                    | BinOpKind::Shl
+                    | BinOpKind::Shr
+                    | BinOpKind::Eq
+                    | BinOpKind::Ne
+                    | BinOpKind::Lt
+                    | BinOpKind::Le
+                    | BinOpKind::Gt
+                    | BinOpKind::Ge => unreachable!("unsupported binary operator"),
                 };
                 format!(
                     "({} {} {})",
@@ -55,7 +68,9 @@ impl LispExpr {
             LispExpr::Unary(UnOp::Neg, inner) => {
                 format!("(- {})", inner.to_lisp(placeholder))
             }
-            LispExpr::Unary(_, _) => unreachable!("unsupported unary operator"),
+            LispExpr::Unary(UnOp::Deref | UnOp::Not, _) => {
+                unreachable!("unsupported unary operator")
+            }
         }
     }
 
@@ -110,7 +125,20 @@ impl LispExpr {
                     BinOpKind::Sub => "-",
                     BinOpKind::Mul => "*",
                     BinOpKind::Div => "/",
-                    _ => unreachable!("unsupported binary operator"),
+                    BinOpKind::Rem
+                    | BinOpKind::And
+                    | BinOpKind::Or
+                    | BinOpKind::BitXor
+                    | BinOpKind::BitAnd
+                    | BinOpKind::BitOr
+                    | BinOpKind::Shl
+                    | BinOpKind::Shr
+                    | BinOpKind::Eq
+                    | BinOpKind::Ne
+                    | BinOpKind::Lt
+                    | BinOpKind::Le
+                    | BinOpKind::Gt
+                    | BinOpKind::Ge => unreachable!("unsupported binary operator"),
                 };
                 format!(
                     "({} {} {})",
@@ -148,13 +176,46 @@ impl LispExpr {
             LispExpr::Unary(UnOp::Neg, inner) => {
                 format!("(-{})", inner.to_rust(cx, bindings))
             }
-            LispExpr::Unary(_, _) => unreachable!("unsupported unary operator"),
+            LispExpr::Unary(UnOp::Deref | UnOp::Not, _) => {
+                unreachable!("unsupported unary operator")
+            }
         }
     }
 }
 
 fn is_f64(ty: Ty<'_>) -> bool {
-    matches!(ty.kind(), ty::Float(ty::FloatTy::F64))
+    match ty.kind() {
+        ty::Float(ty::FloatTy::F64) => true,
+        ty::Float(ty::FloatTy::F16 | ty::FloatTy::F32 | ty::FloatTy::F128) => false,
+        ty::Bool
+        | ty::Char
+        | ty::Int(_)
+        | ty::Uint(_)
+        | ty::Adt(_, _)
+        | ty::Foreign(_)
+        | ty::Str
+        | ty::Array(_, _)
+        | ty::Pat(_, _)
+        | ty::Slice(_)
+        | ty::RawPtr(_, _)
+        | ty::Ref(_, _, _)
+        | ty::FnDef(_, _)
+        | ty::FnPtr(_, _)
+        | ty::Dynamic(_, _, _)
+        | ty::Closure(_, _)
+        | ty::CoroutineClosure(_, _)
+        | ty::Coroutine(_, _)
+        | ty::CoroutineWitness(_, _)
+        | ty::Never
+        | ty::Tuple(_)
+        | ty::Alias(_, _)
+        | ty::Param(_)
+        | ty::Bound(_, _)
+        | ty::Placeholder(_)
+        | ty::Infer(_)
+        | ty::Error(_)
+        | ty::UnsafeBinder(_) => false,
+    }
 }
 
 /// Map Rust function names to Herbie names.
@@ -589,6 +650,8 @@ impl std::fmt::Display for ParseError {
         }
     }
 }
+
+impl std::error::Error for ParseError {}
 
 #[cfg(test)]
 mod tests {
