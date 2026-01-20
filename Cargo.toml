@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Dylint lint for detecting numerically unstable floating-point expressions"
 license = "BlueOak-1.0.0"
-repository = "https://github.com/yourusername/herbie-lint"
+repository = "https://github.com/urschrei/herbie-lint"
 keywords = ["lint", "numerics", "floating-point", "dylint"]
 categories = ["development-tools"]
 # Cannot publish to crates.io due to clippy_utils git dependency
