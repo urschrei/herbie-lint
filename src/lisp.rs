@@ -243,7 +243,7 @@ fn from_expr_inner<'tcx>(
         ExprKind::Path(qpath) => {
             let id = *next_id;
             *next_id += 1;
-            bindings.insert(id, MatchBinding::Path(qpath.clone(), expr.span));
+            bindings.insert(id, MatchBinding::Path(*qpath, expr.span));
             Some(LispExpr::Ident(id))
         }
 
@@ -350,6 +350,7 @@ impl<'tcx> MatchBindings<'tcx> {
 
 /// A binding from a pattern variable to a matched expression.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum MatchBinding<'tcx> {
     Path(QPath<'tcx>, Span),
     Field(&'tcx Expr<'tcx>, Ident, Span),
@@ -360,7 +361,7 @@ pub enum MatchBinding<'tcx> {
 impl<'tcx> MatchBinding<'tcx> {
     fn from_expr(expr: &'tcx Expr<'tcx>) -> Self {
         match &expr.kind {
-            ExprKind::Path(qpath) => MatchBinding::Path(qpath.clone(), expr.span),
+            ExprKind::Path(qpath) => MatchBinding::Path(*qpath, expr.span),
             ExprKind::Field(base, field) => MatchBinding::Field(base, *field, expr.span),
             ExprKind::Lit(lit) => match lit.node {
                 LitKind::Float(sym, _) => {
@@ -515,10 +516,10 @@ impl Parser {
         }
 
         // Try to parse as a herbie identifier (e.g., "herbie0")
-        if let Some(rest) = sym.strip_prefix("herbie") {
-            if let Ok(id) = rest.parse::<u64>() {
-                return Ok(LispExpr::Ident(id));
-            }
+        if let Some(rest) = sym.strip_prefix("herbie")
+            && let Ok(id) = rest.parse::<u64>()
+        {
+            return Ok(LispExpr::Ident(id));
         }
 
         Err(ParseError::UnknownAtom(sym))

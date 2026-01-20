@@ -132,10 +132,11 @@ impl<'tcx> LateLintPass<'tcx> for Herbie {
             .conf
             .as_ref()
             .expect("Configuration should be read by now");
-        if !got_match && conf.use_herbie != UseHerbieConf::No {
-            if let Err(err) = try_with_herbie(cx, expr, conf) {
-                cx.tcx.dcx().span_warn(expr.span, err);
-            }
+        if !got_match
+            && conf.use_herbie != UseHerbieConf::No
+            && let Err(err) = try_with_herbie(cx, expr, conf)
+        {
+            cx.tcx.dcx().span_warn(expr.span, err);
         }
     }
 }
