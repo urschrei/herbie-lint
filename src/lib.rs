@@ -79,6 +79,12 @@ impl Herbie {
                     return None;
                 }
 
+                // Skip entries with conditional output (if statements)
+                // as these aren't directly translatable to simple Rust
+                if cmdout.contains("if") {
+                    return None;
+                }
+
                 let cmdin = parser.parse(&cmdin).ok()?;
                 let cmdout = parser.parse(&cmdout).ok()?;
                 Some((cmdin, cmdout))

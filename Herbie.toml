@@ -1,0 +1,17 @@
+# Herbie Lint Configuration
+
+# Path to the SQLite database containing expression transformations
+db_path = "db/Herbie.db"
+
+# Seed for Herbie's random number generator (ensures deterministic builds)
+herbie_seed = "#(1461197085 2376054483 1553562171 1611329376 2497620867 2308122621)"
+
+# Whether to call the Herbie tool for unknown expressions
+# - true: Require Herbie, fail if not found
+# - false: Never call Herbie
+# - omit: Call Herbie if available (default)
+use_herbie = false
+
+# Maximum time in seconds for Herbie to process an expression
+# Set to 0 for no timeout
+timeout = 120

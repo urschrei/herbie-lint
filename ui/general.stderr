@@ -1,0 +1,22 @@
+warning: numerically unstable expression
+  --> $DIR/general.rs:10:13
+   |
+LL |     let _ = (a * a + b * b).sqrt();
+   |             ^^^^^^^^^^^^^^^^^^^^^^ help: try this: `a.hypot(b)`
+   |
+   = note: `#[warn(herbie)]` on by default
+
+warning: numerically unstable expression
+  --> $DIR/general.rs:13:13
+   |
+LL |     let _ = (a + 1.0).ln();
+   |             ^^^^^^^^^^^^^^ help: try this: `a.ln_1p()`
+
+warning: numerically unstable expression
+  --> $DIR/general.rs:16:13
+   |
+LL |     let _ = a.exp() - 1.0;
+   |             ^^^^^^^^^^^^^ help: try this: `a.exp_m1()`
+
+warning: 3 warnings emitted
+
