@@ -1,12 +1,23 @@
 use serde::Deserialize;
 use std::borrow::Cow;
+use std::env;
 use std::fs;
 use std::io;
+use std::path::{Path, PathBuf};
 
 const DEFAULT_HERBIE_SEED: &str =
     "#(1461197085 2376054483 1553562171 1611329376 2497620867 2308122621)";
 const DEFAULT_DB_PATH: &str = "Herbie.db";
 const DEFAULT_TIMEOUT: u32 = 120;
+
+/// Returns the directory to search for Herbie.toml and resolve relative paths.
+/// Uses CARGO_MANIFEST_DIR if set (during cargo build), otherwise falls back to
+/// the current working directory.
+fn config_base_dir() -> PathBuf {
+    env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| env::current_dir().unwrap_or_default())
+}
 
 #[derive(Debug, Deserialize)]
 struct UxConf {
@@ -31,10 +42,11 @@ pub struct Conf {
     pub use_herbie: UseHerbieConf,
 }
 
-impl Default for Conf {
-    fn default() -> Self {
+impl Conf {
+    /// Create a default configuration, resolving the default db_path relative to base_dir.
+    fn default_for_dir(base_dir: &Path) -> Self {
         Self {
-            db_path: DEFAULT_DB_PATH.into(),
+            db_path: resolve_path(base_dir, DEFAULT_DB_PATH).into(),
             herbie_seed: DEFAULT_HERBIE_SEED.into(),
             timeout: Some(DEFAULT_TIMEOUT),
             use_herbie: UseHerbieConf::Default,
@@ -42,20 +54,23 @@ impl Default for Conf {
     }
 }
 
-impl From<UxConf> for Conf {
-    fn from(ux: UxConf) -> Self {
-        Self {
-            db_path: ux.db_path.map_or(DEFAULT_DB_PATH.into(), Into::into),
-            herbie_seed: ux
+impl UxConf {
+    /// Convert user config to internal config, resolving relative paths against base_dir.
+    fn into_conf(self, base_dir: &Path) -> Conf {
+        let db_path = self
+            .db_path
+            .map(|p| resolve_path(base_dir, &p))
+            .unwrap_or_else(|| resolve_path(base_dir, DEFAULT_DB_PATH));
+
+        Conf {
+            db_path: db_path.into(),
+            herbie_seed: self
                 .herbie_seed
                 .map_or(DEFAULT_HERBIE_SEED.into(), Into::into),
-            timeout: ux.timeout.map_or(
-                Some(DEFAULT_TIMEOUT),
-                |t| {
-                    if t == 0 { None } else { Some(t) }
-                },
-            ),
-            use_herbie: ux.use_herbie.map_or(UseHerbieConf::Default, |u| {
+            timeout: self.timeout.map_or(Some(DEFAULT_TIMEOUT), |t| {
+                if t == 0 { None } else { Some(t) }
+            }),
+            use_herbie: self.use_herbie.map_or(UseHerbieConf::Default, |u| {
                 if u {
                     UseHerbieConf::Yes
                 } else {
@@ -63,6 +78,16 @@ impl From<UxConf> for Conf {
                 }
             }),
         }
+    }
+}
+
+/// Resolve a path relative to base_dir if it's not absolute.
+fn resolve_path(base_dir: &Path, path: &str) -> String {
+    let p = Path::new(path);
+    if p.is_absolute() {
+        path.to_string()
+    } else {
+        base_dir.join(path).to_string_lossy().into_owned()
     }
 }
 
@@ -91,12 +116,15 @@ impl std::error::Error for ConfError {
 }
 
 pub fn read_conf() -> Result<Conf, ConfError> {
-    match fs::read_to_string("Herbie.toml") {
+    let base_dir = config_base_dir();
+    let config_path = base_dir.join("Herbie.toml");
+
+    match fs::read_to_string(&config_path) {
         Ok(content) => {
             let ux: UxConf = toml::from_str(&content).map_err(ConfError::Parse)?;
-            Ok(ux.into())
+            Ok(ux.into_conf(&base_dir))
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Conf::default()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Conf::default_for_dir(&base_dir)),
         Err(e) => Err(ConfError::Io(e)),
     }
 }
