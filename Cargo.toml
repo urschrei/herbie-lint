@@ -1,0 +1,25 @@
+[package]
+name = "herbie-lint"
+version = "0.1.0"
+edition = "2024"
+description = "Lint for detecting numerically unstable floating-point expressions"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "20ce69b9a63bcd2756cd906fe0964d1e901e042a" }
+dylint_linting = "5.0.0"
+rusqlite = "0.32"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+wait-timeout = "0.2"
+itertools = "0.13"
+
+[dev-dependencies]
+dylint_testing = "5.0.0"
+
+[package.metadata.rust-analyzer]
+rustc_private = true
