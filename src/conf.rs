@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 
 const DEFAULT_HERBIE_SEED: &str =
     "#(1461197085 2376054483 1553562171 1611329376 2497620867 2308122621)";
-const DEFAULT_DB_PATH: &str = "Herbie.db";
 const DEFAULT_TIMEOUT: u32 = 120;
 
 /// Returns the directory to search for Herbie.toml and resolve relative paths.
@@ -36,17 +35,17 @@ pub enum UseHerbieConf {
 
 #[derive(Debug)]
 pub struct Conf {
-    pub db_path: Cow<'static, str>,
+    /// Path to the Herbie database. None means use the embedded database.
+    pub db_path: Option<String>,
     pub herbie_seed: Cow<'static, str>,
     pub timeout: Option<u32>,
     pub use_herbie: UseHerbieConf,
 }
 
-impl Conf {
-    /// Create a default configuration, resolving the default db_path relative to base_dir.
-    fn default_for_dir(base_dir: &Path) -> Self {
+impl Default for Conf {
+    fn default() -> Self {
         Self {
-            db_path: resolve_path(base_dir, DEFAULT_DB_PATH).into(),
+            db_path: None, // Use embedded database
             herbie_seed: DEFAULT_HERBIE_SEED.into(),
             timeout: Some(DEFAULT_TIMEOUT),
             use_herbie: UseHerbieConf::Default,
@@ -57,13 +56,8 @@ impl Conf {
 impl UxConf {
     /// Convert user config to internal config, resolving relative paths against base_dir.
     fn into_conf(self, base_dir: &Path) -> Conf {
-        let db_path = self
-            .db_path
-            .map(|p| resolve_path(base_dir, &p))
-            .unwrap_or_else(|| resolve_path(base_dir, DEFAULT_DB_PATH));
-
         Conf {
-            db_path: db_path.into(),
+            db_path: self.db_path.map(|p| resolve_path(base_dir, &p)),
             herbie_seed: self
                 .herbie_seed
                 .map_or(DEFAULT_HERBIE_SEED.into(), Into::into),
@@ -124,7 +118,7 @@ pub fn read_conf() -> Result<Conf, ConfError> {
             let ux: UxConf = toml::from_str(&content).map_err(ConfError::Parse)?;
             Ok(ux.into_conf(&base_dir))
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Conf::default_for_dir(&base_dir)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Conf::default()),
         Err(e) => Err(ConfError::Io(e)),
     }
 }

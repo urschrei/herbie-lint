@@ -1,4 +1,5 @@
 #![feature(rustc_private)]
+#![feature(once_cell_try)]
 #![warn(unused_extern_crates)]
 
 extern crate rustc_ast;
@@ -20,12 +21,31 @@ use rustc_span::Symbol;
 
 use std::borrow::Cow;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
 use conf::{Conf, ConfError, UseHerbieConf};
 use lisp::{LispExpr, MatchBindings, Parser};
+
+/// The embedded Herbie database.
+const EMBEDDED_DB: &[u8] = include_bytes!("../db/Herbie.db");
+
+/// Returns the path to the embedded database, extracting it to a temp file if needed.
+fn embedded_db_path() -> Result<PathBuf, std::io::Error> {
+    static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+    DB_PATH
+        .get_or_try_init(|| {
+            let path = std::env::temp_dir().join("herbie-lint-embedded.db");
+            // Always write - the file might be stale from a previous version
+            std::fs::write(&path, EMBEDDED_DB)?;
+            Ok(path)
+        })
+        .cloned()
+}
 
 dylint_linting::impl_late_lint! {
     /// Detects numerically unstable floating-point expressions and suggests
@@ -55,8 +75,20 @@ impl Herbie {
         self.initialised = true;
 
         let conf = conf::read_conf()?;
+
+        // Use user-specified db_path if provided, otherwise use embedded database
+        let db_path: Cow<'_, str> = match &conf.db_path {
+            Some(path) => Cow::Borrowed(path.as_str()),
+            None => Cow::Owned(
+                embedded_db_path()
+                    .map_err(InitError::Io)?
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+        };
+
         let connection = sql::Connection::open_with_flags(
-            conf.db_path.as_ref(),
+            db_path.as_ref(),
             sql::OpenFlags::SQLITE_OPEN_READ_ONLY,
         )?;
 
@@ -314,10 +346,13 @@ fn save_to_db(
     errin: f64,
     errout: f64,
 ) -> Result<(), sql::Error> {
-    let connection = sql::Connection::open_with_flags(
-        conf.db_path.as_ref(),
-        sql::OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )?;
+    // Can only save to user-specified database, not the embedded one
+    let Some(db_path) = &conf.db_path else {
+        return Ok(());
+    };
+
+    let connection =
+        sql::Connection::open_with_flags(db_path, sql::OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     connection.execute(
         "INSERT INTO HerbieResults (cmdin, cmdout, opts, errin, errout) VALUES (?1, ?2, ?3, ?4, ?5)",
         (cmdin, cmdout.to_lisp("herbie"), "", errin, errout),
@@ -328,6 +363,7 @@ fn save_to_db(
 #[derive(Debug)]
 pub enum InitError {
     Conf(ConfError),
+    Io(std::io::Error),
     Sql(sql::Error),
 }
 
@@ -335,6 +371,7 @@ impl std::fmt::Display for InitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InitError::Conf(e) => write!(f, "Configuration error: {}", e),
+            InitError::Io(e) => write!(f, "IO error: {}", e),
             InitError::Sql(e) => write!(f, "SQL error: {}", e),
         }
     }
@@ -344,6 +381,7 @@ impl std::error::Error for InitError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             InitError::Conf(e) => Some(e),
+            InitError::Io(e) => Some(e),
             InitError::Sql(e) => Some(e),
         }
     }
