@@ -318,7 +318,14 @@ fn try_with_herbie<'tcx>(
 
     let (errin, errout, cmdout_str) = match parse_fpcore_output(&output)? {
         HerbieResult::Improvement(errin, errout, body) => (errin, errout, body),
-        HerbieResult::NoResult => return Ok(()), // Herbie couldn't process the expression
+        HerbieResult::NoResult => {
+            // Herbie couldn't process the expression - emit a note
+            cx.tcx.dcx().span_note(
+                expr.span,
+                "Herbie couldn't analyse this expression (no valid sample points)",
+            );
+            return Ok(());
+        }
     };
 
     // Check if there is improvement
