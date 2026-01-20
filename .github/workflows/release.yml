@@ -7,31 +7,20 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  TOOLCHAIN: nightly-2025-09-18
 
 jobs:
-  build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: libherbie_lint.so
-          - os: macos-13
-            target: x86_64-apple-darwin
-            artifact: libherbie_lint.dylib
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: libherbie_lint.dylib
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         run: |
-          rustup toolchain install ${{ env.TOOLCHAIN }} --profile minimal --component rustc-dev,llvm-tools-preview,clippy
-          rustup override set ${{ env.TOOLCHAIN }}
+          rustup toolchain install nightly-2025-09-18 --profile minimal --component rustc-dev,llvm-tools-preview,clippy
+          rustup override set nightly-2025-09-18
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -64,40 +53,7 @@ jobs:
       - name: Run tests
         run: cargo nextest run
 
-      - name: Build release
-        run: cargo build --release
-
-      - name: Rename artifact with toolchain info
-        run: |
-          cd target/release
-          mv ${{ matrix.artifact }} libherbie_lint@${{ env.TOOLCHAIN }}-${{ matrix.target }}.${{ matrix.artifact == 'libherbie_lint.so' && 'so' || 'dylib' }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: libherbie_lint-${{ matrix.target }}
-          path: target/release/libherbie_lint@*
-
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: List artifacts
-        run: ls -la artifacts/
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: artifacts/*
