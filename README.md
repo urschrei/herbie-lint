@@ -149,4 +149,4 @@ This is a port of [rust-herbie-lint](https://github.com/mcarton/rust-herbie-lint
 
 ## Licence
 
-MIT OR Apache-2.0
+[Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0)
