@@ -33,7 +33,7 @@ Add to your project's `Cargo.toml`:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/urschrei/herbie-lint", tag = "v0.1.0" }
+    { git = "https://github.com/urschrei/herbie-lint", tag = "v0.2.0" }
 ]
 ```
 
@@ -48,7 +48,7 @@ Dylint will automatically clone, build, and cache the lint.
 ### One-off check
 
 ```bash
-cargo dylint --git https://github.com/urschrei/herbie-lint --tag v0.1.0
+cargo dylint --git https://github.com/urschrei/herbie-lint --tag v0.2.0
 ```
 
 ### Local build
@@ -155,6 +155,22 @@ timeout = 120
 ```
 
 Note: Live analysis adds significant time per expression. The default database covers the most impactful patterns without requiring Herbie.
+
+## Troubleshooting
+
+### Stale cache after upgrade
+
+Dylint caches built lints. If you upgrade to a new version and experience issues, clear the cache:
+
+```bash
+# macOS
+rm -rf ~/Library/Caches/dylint
+
+# Linux
+rm -rf ~/.cache/dylint
+```
+
+Then run the lint again to trigger a fresh build.
 
 ## Development
 
