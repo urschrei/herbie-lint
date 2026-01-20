@@ -24,13 +24,21 @@ cargo install cargo-dylint dylint-link
 
 ## Usage
 
-Run the lint on your project:
+First, build the lint in release mode:
 
 ```bash
-cargo dylint herbie --path /path/to/herbie-lint -- --manifest-path /path/to/your/project/Cargo.toml
+cd /path/to/herbie-lint
+cargo build --release
 ```
 
-Or add to your project's `dylint.toml`:
+Then run on your project using the built library (the filename includes your toolchain version):
+
+```bash
+cargo dylint --lib-path /path/to/herbie-lint/target/release/libherbie_lint@nightly-2025-09-18-aarch64-apple-darwin.dylib \
+    --manifest-path /path/to/your/project/Cargo.toml
+```
+
+Alternatively, add to your project's `Cargo.toml`:
 
 ```toml
 [workspace.metadata.dylint]
@@ -43,6 +51,12 @@ Then run:
 
 ```bash
 cargo dylint --all
+```
+
+To list available lints:
+
+```bash
+cargo dylint list --lib-path /path/to/herbie-lint/target/release/libherbie_lint@nightly-2025-09-18-aarch64-apple-darwin.dylib
 ```
 
 ## Configuration
@@ -126,7 +140,7 @@ cargo test
 List available lints:
 
 ```bash
-cargo dylint list --path .
+cargo dylint list --lib-path target/release/libherbie_lint@nightly-2025-09-18-aarch64-apple-darwin.dylib
 ```
 
 ## Background
