@@ -33,7 +33,7 @@ Add to your project's `Cargo.toml`:
 ```toml
 [workspace.metadata.dylint]
 libraries = [
-    { git = "https://github.com/yourusername/herbie-lint" }
+    { git = "https://github.com/urschrei/herbie-lint" }
 ]
 ```
 
@@ -48,7 +48,7 @@ Dylint will automatically clone, build, and cache the lint.
 ### One-off check
 
 ```bash
-cargo dylint --git https://github.com/yourusername/herbie-lint
+cargo dylint --git https://github.com/urschrei/herbie-lint
 ```
 
 ### Local build
@@ -120,14 +120,14 @@ The following mathematical functions are recognised and can be transformed:
 | `tan` | 1 | Tangent |
 | `tanh` | 1 | Hyperbolic tangent |
 
-## Custom Database
+## Database
 
-The lint includes an embedded database with common transformations. To use a custom database:
+The lint includes an embedded database with 119 pre-computed transformations sourced from the [GHC Herbie Plugin](https://github.com/mikeizbicki/HerbiePlugin/blob/master/data/Herbie.db) (last updated October 2015). This covers the most common numerical stability improvements.
+
+To use a custom database:
 
 1. Set `db_path` in `Herbie.toml` to point to your SQLite database
 2. Enable `use_herbie = true` to automatically discover and save new transformations (requires Herbie to be installed)
-
-The database format is compatible with the [GHC Herbie Plugin](https://github.com/mikeizbicki/HerbiePlugin).
 
 ## Development
 
