@@ -133,21 +133,25 @@ For expressions not in the database, you can optionally enable live analysis via
 
 This is useful for codebases with domain-specific numerical patterns not covered by the default database.
 
-**Requirements:** Herbie 2.x installed and available on PATH. Install via:
+**Requirements:** Herbie 2.x installed. Install via:
 - macOS: `brew install minimal-racket && raco pkg install --auto herbie`
 - Linux/other: See [Herbie installation docs](https://herbie.uwplse.org/doc/latest/installing.html)
 
 To enable, create a `Herbie.toml` in your project:
 
 ```toml
-# Custom database to save new discoveries (required for saving)
-db_path = "my-herbie.db"
+# Path to Herbie executable (required if not on PATH)
+# macOS with Homebrew:
+herbie_path = "/opt/homebrew/opt/minimal-racket/bin/herbie"
 
 # Enable live Herbie analysis
 use_herbie = true
 
 # Timeout per expression in seconds (Herbie can be slow)
 timeout = 120
+
+# Custom database to save new discoveries (optional)
+# db_path = "my-herbie.db"
 ```
 
 Note: Live analysis adds significant time per expression. The default database covers the most impactful patterns without requiring Herbie.

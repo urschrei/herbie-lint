@@ -21,6 +21,7 @@ fn config_base_dir() -> PathBuf {
 #[derive(Debug, Deserialize)]
 struct UxConf {
     db_path: Option<String>,
+    herbie_path: Option<String>,
     herbie_seed: Option<String>,
     timeout: Option<u32>,
     use_herbie: Option<bool>,
@@ -37,6 +38,8 @@ pub enum UseHerbieConf {
 pub struct Conf {
     /// Path to the Herbie database. None means use the embedded database.
     pub db_path: Option<String>,
+    /// Path to the Herbie executable. None means use "herbie" from PATH.
+    pub herbie_path: Option<String>,
     pub herbie_seed: Cow<'static, str>,
     pub timeout: Option<u32>,
     pub use_herbie: UseHerbieConf,
@@ -45,7 +48,8 @@ pub struct Conf {
 impl Default for Conf {
     fn default() -> Self {
         Self {
-            db_path: None, // Use embedded database
+            db_path: None,     // Use embedded database
+            herbie_path: None, // Use "herbie" from PATH
             herbie_seed: DEFAULT_HERBIE_SEED.into(),
             timeout: Some(DEFAULT_TIMEOUT),
             use_herbie: UseHerbieConf::Default,
@@ -58,6 +62,7 @@ impl UxConf {
     fn into_conf(self, base_dir: &Path) -> Conf {
         Conf {
             db_path: self.db_path.map(|p| resolve_path(base_dir, &p)),
+            herbie_path: self.herbie_path,
             herbie_seed: self
                 .herbie_seed
                 .map_or(DEFAULT_HERBIE_SEED.into(), Into::into),

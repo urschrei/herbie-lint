@@ -250,7 +250,8 @@ fn try_with_herbie<'tcx>(
     }
 
     // Spawn Herbie shell process (Herbie 2.x)
-    let mut command = Command::new("herbie");
+    let herbie_cmd = conf.herbie_path.as_deref().unwrap_or("herbie");
+    let mut command = Command::new(herbie_cmd);
     command
         .arg("shell")
         .arg("--seed")
