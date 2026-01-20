@@ -124,10 +124,29 @@ The following mathematical functions are recognised and can be transformed:
 
 The lint includes an embedded database with 119 pre-computed transformations sourced from the [GHC Herbie Plugin](https://github.com/mikeizbicki/HerbiePlugin/blob/master/data/Herbie.db) (last updated October 2015). This covers the most common numerical stability improvements.
 
-To use a custom database:
+### Using Herbie for dynamic analysis
 
-1. Set `db_path` in `Herbie.toml` to point to your SQLite database
-2. Enable `use_herbie = true` to automatically discover and save new transformations (requires Herbie to be installed)
+For expressions not in the database, you can optionally enable live analysis via the [Herbie](https://herbie.uwplse.org/) tool. When enabled, the lint will:
+
+1. **Analyse unknown expressions** - Spawn `herbie-inout` to find improvements for expressions that don't match any pre-computed patterns
+2. **Grow your database** - Save newly discovered transformations for future runs
+
+This is useful for codebases with domain-specific numerical patterns not covered by the default database.
+
+To enable, create a `Herbie.toml` in your project:
+
+```toml
+# Custom database to save new discoveries (required for saving)
+db_path = "my-herbie.db"
+
+# Enable live Herbie analysis
+use_herbie = true
+
+# Timeout per expression in seconds (Herbie can be slow)
+timeout = 120
+```
+
+Note: Live analysis adds significant time per expression. The default database covers the most impactful patterns without requiring Herbie.
 
 ## Development
 
