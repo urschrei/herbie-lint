@@ -316,7 +316,10 @@ fn try_with_herbie<'tcx>(
         .read_to_string(&mut output)
         .map_err(|e| format!("cannot read output: {}", e))?;
 
-    let (errin, errout, cmdout_str) = parse_fpcore_output(&output)?;
+    let (errin, errout, cmdout_str) = match parse_fpcore_output(&output)? {
+        HerbieResult::Improvement(errin, errout, body) => (errin, errout, body),
+        HerbieResult::NoResult => return Ok(()), // Herbie couldn't process the expression
+    };
 
     // Check if there is improvement
     if errin <= errout {
@@ -350,26 +353,40 @@ fn try_with_herbie<'tcx>(
 ///  body-expr)
 /// herbie>
 /// ```
-fn parse_fpcore_output(output: &str) -> Result<(f64, f64, String), Cow<'static, str>> {
+/// Result of parsing Herbie output.
+enum HerbieResult {
+    /// Herbie found an improvement: (input_error, output_error, improved_expression)
+    Improvement(f64, f64, String),
+    /// Herbie couldn't process the expression (e.g., "No valid values")
+    NoResult,
+}
+
+fn parse_fpcore_output(output: &str) -> Result<HerbieResult, Cow<'static, str>> {
     // Find the FPCore expression in the output (skip banners and prompts)
-    let fpcore_start = output.find("(FPCore").ok_or("no FPCore in output")?;
+    // If there's no FPCore, Herbie likely output a warning (e.g., "No valid values")
+    let Some(fpcore_start) = output.find("(FPCore") else {
+        return Ok(HerbieResult::NoResult);
+    };
     let fpcore_section = &output[fpcore_start..];
 
     // Find the matching closing paren
     let fpcore = extract_balanced_list_inclusive(fpcore_section).ok_or("malformed FPCore")?;
 
     // Extract :herbie-error-input value
-    let errin = extract_herbie_error(&fpcore, ":herbie-error-input")
-        .ok_or("missing :herbie-error-input")?;
+    // If missing, Herbie may have encountered an issue
+    let Some(errin) = extract_herbie_error(&fpcore, ":herbie-error-input") else {
+        return Ok(HerbieResult::NoResult);
+    };
 
     // Extract :herbie-error-output value
-    let errout = extract_herbie_error(&fpcore, ":herbie-error-output")
-        .ok_or("missing :herbie-error-output")?;
+    let Some(errout) = extract_herbie_error(&fpcore, ":herbie-error-output") else {
+        return Ok(HerbieResult::NoResult);
+    };
 
     // Extract body expression - it's the last balanced expression before the final )
     let body = extract_body_expression(&fpcore).ok_or("missing body expression")?;
 
-    Ok((errin, errout, body))
+    Ok(HerbieResult::Improvement(errin, errout, body))
 }
 
 /// Extract the average error value from a Herbie error property.
