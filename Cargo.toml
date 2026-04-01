@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 [dependencies]
 clippy_utils = { git = "https://github.com/rust-lang/rust-clippy", rev = "20ce69b9a63bcd2756cd906fe0964d1e901e042a" }
 dylint_linting = "5.0.0"
-rusqlite = "0.38"
+rusqlite = "0.39"
 serde = { version = "1", features = ["derive"] }
 toml = "1.0"
 wait-timeout = "0.2"
