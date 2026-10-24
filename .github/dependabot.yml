@@ -3,17 +3,27 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     groups:
       all-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      all-dependencies-security:
+        applies-to: security-updates
         patterns:
           - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
     groups:
       all-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      all-actions-security:
+        applies-to: security-updates
         patterns:
           - "*"
